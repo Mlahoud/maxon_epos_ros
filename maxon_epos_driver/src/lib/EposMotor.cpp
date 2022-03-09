@@ -47,13 +47,16 @@ void EposMotor::init(ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh, const 
     initProtocolStackChanges(motor_nh);
     initControlMode(root_nh, motor_nh);
     initEncoderParams(motor_nh);
-    initProfilePosition(motor_nh);
+    initProfilePosition(motor_nh); // I want to be able to change this mode from outside
+    initProfileVelocity(motor_nh);
     initMiscParams(motor_nh);
 
     VCS_NODE_COMMAND_NO_ARGS(SetEnableState, m_epos_handle);
 
     m_state_publisher = motor_nh.advertise<maxon_epos_msgs::MotorState>("get_state", 100);
     m_state_subscriber = motor_nh.subscribe("set_state", 100, &EposMotor::writeCallback, this);
+    //m_mode_subscriber = motor_nh.subscribe("set_mode", 100, &EposMotor::modeCallback, this);
+    
 }
 
 maxon_epos_msgs::MotorState EposMotor::read()
@@ -69,6 +72,7 @@ maxon_epos_msgs::MotorState EposMotor::read()
         ROS_ERROR_STREAM(e.what());
     }
     maxon_epos_msgs::MotorState msg;
+    msg.header.stamp = ros::Time::now();
     msg.motor_name = m_motor_name;
     msg.position = m_position;
     msg.velocity = m_velocity;
@@ -88,23 +92,23 @@ void EposMotor::write(const double position, const double velocity, const double
     }
 }
 
-void EposMotor::writeCallback(const maxon_epos_msgs::MotorState::ConstPtr &msg)
-{
-    write(msg->position, msg->velocity, msg->current);
-}
-
 /**
  * @brief Initialize Epos Node Handle
  *
  * @param motor_nh ros NodeHandle of motor
  */
+void EposMotor::writeCallback(const maxon_epos_msgs::MotorState::ConstPtr &msg)
+{
+    write(msg->position, msg->velocity, msg->current);
+}
+
 void EposMotor::initEposDeviceHandle(ros::NodeHandle &motor_nh)
 {
     const DeviceInfo device_info(motor_nh.param<std::string>("device", "EPOS4"),
                                  motor_nh.param<std::string>("protocol_stack", "MAXON SERIAL V2"),
                                  motor_nh.param<std::string>("interface", "USB"),
                                  motor_nh.param<std::string>("port", "USB0"));
-    const unsigned short node_id(motor_nh.param("node_id", 0));
+    const unsigned short node_id(motor_nh.param("node_id", 1));
 
     // create epos handle
     m_epos_handle = HandleManager::CreateEposHandle(device_info, node_id);
@@ -164,9 +168,9 @@ void EposMotor::initProtocolStackChanges(ros::NodeHandle &motor_nh)
  * @param root_nh NodeHandle of TopLevel
  * @param motor_nh NodeHandle of motor
  */
-void EposMotor::initControlMode(ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh)
+void EposMotor::initControlMode(ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh) // how do I call this function from the outside?
 {
-    const std::string control_mode(motor_nh.param<std::string>("control_mode", "profile_position"));
+    const std::string control_mode(motor_nh.param<std::string>("control_mode", "profile_position")); 
     if (control_mode == "profile_position") {
         m_control_mode.reset(new EposProfilePositionMode());
     } else if (control_mode == "profile_velocity") {
@@ -177,6 +181,45 @@ void EposMotor::initControlMode(ros::NodeHandle &root_nh, ros::NodeHandle &motor
         throw EposException("Unsupported control mode (" + control_mode + ")");
     }
     m_control_mode->init(motor_nh, m_epos_handle);
+}
+
+void EposMotor::changeControlMode(const std::string &cmd_mode, ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh,
+            const std::string &motor_name) // how do I call this function from the outside?
+{
+    // Part taken from the init function here in EposMotor.cpp
+    m_motor_name = motor_name;
+    initEposDeviceHandle(motor_nh);
+    VCS_NODE_COMMAND_NO_ARGS(SetDisableState, m_epos_handle);
+    initDeviceError();
+    initProtocolStackChanges(motor_nh);
+    if (cmd_mode == "profile_position") {
+        std::cout<< "Changing to Position Control!"<<std::endl; // to remove after debug
+        m_control_mode.reset(new EposProfilePositionMode());
+        VCS_NODE_COMMAND_NO_ARGS(ActivateProfilePositionMode, m_epos_handle);
+    } else if (cmd_mode == "profile_velocity") {
+        std::cout<<"Changing to Velocity Control"<<std::endl; // to remove after debug
+        m_control_mode.reset(new EposProfileVelocityMode());
+        VCS_NODE_COMMAND_NO_ARGS(ActivateProfileVelocityMode, m_epos_handle);
+    } else if (cmd_mode == "current") {
+        m_control_mode.reset(new EposCurrentMode());
+    } else {
+        throw EposException("Unsupported control mode (" + cmd_mode + ")");
+    }
+    m_control_mode->init(motor_nh, m_epos_handle);
+    initEncoderParams(motor_nh);
+    if (cmd_mode == "profile_position") {
+        initProfilePosition(motor_nh); // I want to be able to change this mode from outside
+    } else if (cmd_mode == "profile_velocity") {
+        initProfileVelocity(motor_nh); // I want to be able to change this mode from outside
+    } else {
+        throw EposException("Unsupported control mode (" + cmd_mode + ")");
+    }
+    //initProfilePosition(motor_nh); // I want to be able to change this mode from outside
+    initMiscParams(motor_nh);
+    VCS_NODE_COMMAND_NO_ARGS(SetEnableState, m_epos_handle);
+    m_state_publisher = motor_nh.advertise<maxon_epos_msgs::MotorState>("get_state", 100);
+    m_state_subscriber = motor_nh.subscribe("set_state", 100, &EposMotor::writeCallback, this);
+    //m_mode_subscriber = motor_nh.subscribe("set_mode", 100, &EposMotor::modeCallback, this);
 }
 
 /**
@@ -238,6 +281,16 @@ void EposMotor::initProfilePosition(ros::NodeHandle &motor_nh)
     }
 }
 
+void EposMotor::initProfileVelocity(ros::NodeHandle &motor_nh)
+{
+    ros::NodeHandle profile_velocity_nh(motor_nh, "profile_velocity");
+    if (profile_velocity_nh.hasParam("acceleration")) {
+        int acceleration, deceleration; // this parameters should be checked to improve the node...
+        profile_velocity_nh.getParam("acceleration", acceleration);
+        profile_velocity_nh.getParam("deceleration", deceleration);
+        VCS_NODE_COMMAND(SetVelocityProfile, m_epos_handle, acceleration, deceleration);
+    }
+}
 /**
  * @brief Initialize other parameters
  *

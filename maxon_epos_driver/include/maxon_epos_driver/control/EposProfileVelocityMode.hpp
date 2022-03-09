@@ -23,7 +23,8 @@ public:
     virtual void write(const double position, const double velocity, const double current);
 
 private:
-
+    int m_max_qc; // These two definitions are from the profile position mode... We still need to figure out some things...
+    double m_position_cmd;
 };
 
 #endif // _EposProfileVelocityMode_HPP

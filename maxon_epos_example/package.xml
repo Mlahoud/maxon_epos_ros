@@ -12,7 +12,7 @@
 
   <author email="taross0524.ss@gmail.com">Ryutaro Matsumoto</author>
 
-
+  <build_depend>maxon_epos_driver</build_depend>
   <buildtool_depend>catkin</buildtool_depend>
   <exec_depend>maxon_epos_driver</exec_depend>
 

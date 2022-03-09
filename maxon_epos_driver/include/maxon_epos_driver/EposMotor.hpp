@@ -11,6 +11,7 @@
 #include <string>
 #include <ros/ros.h>
 #include <std_msgs/Float32.h>
+#include "std_msgs/String.h"
 #include "maxon_epos_driver/Device.hpp"
 #include "maxon_epos_driver/control/ControlModeBase.hpp"
 #include "maxon_epos_msgs/MotorState.h"
@@ -26,6 +27,9 @@ public:
 
     maxon_epos_msgs::MotorState read();
     void write(const double position, const double velocity, const double current);
+    //void writeMode(const std::string& cmd_mode);
+    void changeControlMode(const std::string &cmd_mode, ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh,
+            const std::string &motor_name);
 
 private:
     void initEposDeviceHandle(ros::NodeHandle &motor_nh);
@@ -34,6 +38,7 @@ private:
     void initControlMode(ros::NodeHandle &root_nh, ros::NodeHandle &motor_nh);
     void initEncoderParams(ros::NodeHandle &motor_nh);
     void initProfilePosition(ros::NodeHandle &motor_nh);
+    void initProfileVelocity(ros::NodeHandle &motor_nh);
     void initMiscParams(ros::NodeHandle &motor_nh);
 
     double ReadPosition();
@@ -41,6 +46,7 @@ private:
     double ReadCurrent();
 
     void writeCallback(const maxon_epos_msgs::MotorState::ConstPtr &msg);
+
 
 private:
 
@@ -60,6 +66,7 @@ private:
 
     ros::Publisher m_state_publisher;
     ros::Subscriber m_state_subscriber;
+    ros::Subscriber m_mode_subscriber;
 
     int m_max_qc;
     bool m_use_ros_unit;

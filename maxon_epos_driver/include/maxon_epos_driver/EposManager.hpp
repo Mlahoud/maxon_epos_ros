@@ -27,10 +27,14 @@ public:
 
     void write(const maxon_epos_msgs::MotorStates::ConstPtr& msg);
 
+    void modeSwitch(std::string cmd_mode, ros::NodeHandle &root_nh, ros::NodeHandle &motors_nh,
+            const std::vector<std::string> &motor_names);
+
 private:
     std::vector<std::shared_ptr<EposMotor>> m_motors;
     ros::Publisher m_all_motor_publisher;
     ros::Subscriber m_all_motor_subscriber;
+    std::string cmd_mode;
 };
 
 #endif // _EposManager_HPP
