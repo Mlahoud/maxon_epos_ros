@@ -33,7 +33,7 @@ master_motor:
 
   # profile position mode configs (optional)
   profile_position:
-    velocity: 2000 # [rpm] #tested on 21/12/2021
+    velocity: 3200 # [rpm] #tested on 21/12/2021
     acceleration: 8000 # [rpm/s]
     deceleration: 9000 # [rpm/s]
     
